@@ -1,6 +1,6 @@
 [package]
 name = "cargo-vsm"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Ryan <ryan.michael.tate@gmail.com>"]
 edition = "2018"
 description = "Cargo Version Manager"
