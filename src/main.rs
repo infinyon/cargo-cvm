@@ -8,9 +8,9 @@ use manager::Manager;
 fn main() -> Result<(), Error> {
     env_logger::init();
 
-    let args = App::new("Cargo Version Manager (cargo vsm)")
+    let args = App::new("Rust Crate Version Manager (CVM)")
         // Need to run this as a sub-command since we are extending cargo
-        .subcommand(SubCommand::with_name("vsm")
+        .subcommand(SubCommand::with_name("cvm")
 
         .version(crate_version!())
         .author(crate_authors!())
@@ -37,7 +37,11 @@ fn main() -> Result<(), Error> {
     // Look for Cargo.toml workspace first, this will show where all potential targets exist and their paths;
     // Check if a workspace has changed if one exists. If one has not existed before, we can ignore;
 
-    Manager::new(args)?.check_repo_state()?;
+    let manager = Manager::new(args)?;
+
+    info!("Manager: {:?}", manager);
+
+    manager.check_workspaces()?;
 
     Ok(())
 }
