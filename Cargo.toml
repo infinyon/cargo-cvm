@@ -1,0 +1,19 @@
+[package]
+name = "cargo-vsm"
+version = "0.1.0"
+authors = ["Ryan <ryan.michael.tate@gmail.com>"]
+edition = "2018"
+description = "Cargo Version Manager"
+
+[[bin]]
+name = "cargo-vsm"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.28"
+clap = "2.33.2"
+toml = "0.5.6"
+serde = { version = "1.0.114", features = ["derive"] }
+git2 = "0.13.8"
+log = "0.4.8"
+env_logger = "0.7.1"
