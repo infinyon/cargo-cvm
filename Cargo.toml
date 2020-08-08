@@ -7,7 +7,7 @@ description = "Rust Crate Version Manager (CVM)"
 repository = "https://github.com/infinyon/cargo-cvm"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-keywords = ["version", "crate", "semver", "manager", "semantic"]
+keywords = ["crate", "semantic", "version", "semver", "manager"]
 categories = ["command-line-utilities", "development-tools::cargo-plugins"]
 
 [[bin]]

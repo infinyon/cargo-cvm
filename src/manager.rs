@@ -87,6 +87,7 @@ pub struct Manager {
     check: bool,
     fix: bool,
     warn: bool,
+    force: bool,
     dir: PathBuf,
 }
 
@@ -95,14 +96,15 @@ impl Manager {
         let dir = std::env::current_dir()?;
 
         Ok(Self {
-            dir,
+            dir: dir.clone(),
             semver: args.value_of("semver").unwrap_or("minor").try_into()?,
             check: args.is_present("check"),
             fix: args.is_present("fix"),
             warn: args.is_present("warn"),
+            force: args.is_present("force"),
             target_branch: args.value_of("branch").unwrap_or("master").to_string(),
             current_branch: Self::get_current_branch()?,
-            workspaces: Self::get_cargo_workspace()?,
+            workspaces: Self::get_cargo_workspaces(dir)?,
         })
     }
 
@@ -120,8 +122,8 @@ impl Manager {
         Ok(branch.to_string())
     }
 
-    pub fn get_cargo_workspace() -> Result<Vec<String>, Error> {
-        let mut cargo_toml = std::env::current_dir()?;
+    pub fn get_cargo_workspaces(dir: PathBuf) -> Result<Vec<String>, Error> {
+        let mut cargo_toml = dir;
         cargo_toml.push("Cargo.toml");
 
         if !cargo_toml.exists() {
@@ -223,6 +225,13 @@ impl Manager {
                             self.bump_version(PathBuf::from(workspace))?;
                         } else if self.warn {
                             eprintln!("{}", &msg);
+                        } else {
+                            println!("{}", &msg);
+                        }
+                    } else {
+                        if self.force {
+                            // force an update even if the workspace version is already updated;
+                            self.bump_version(PathBuf::from(workspace))?;
                         }
                     }
                 }
