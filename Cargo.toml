@@ -1,6 +1,6 @@
 [package]
 name = "cargo-cvm"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Ryan <ryan.michael.tate@gmail.com>"]
 edition = "2018"
 description = "Rust Crate Version Manager (CVM)"
