@@ -29,7 +29,7 @@ fn main() -> Result<(), Error> {
                 )
                 .arg(
                     Arg::with_name("fix")
-                        .short("fx")
+                        .short("f")
                         .long("fix")
                         .takes_value(false)
                         .help("Automatically fix the version if it is outdated. By default, this will bump the minor version, unless otherwise specified by the --semver flag"))
