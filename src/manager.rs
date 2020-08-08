@@ -16,7 +16,7 @@ pub struct Version {
 }
 
 impl Version {
-    pub fn bump(&mut self, semver: SemVer) -> () {
+    pub fn bump(&mut self, semver: SemVer) {
         match semver {
             SemVer::Major => {
                 self.major += 1;
@@ -62,7 +62,7 @@ impl TryInto<Version> for String {
     type Error = Error;
     fn try_into(self) -> Result<Version, Self::Error> {
         let version = self
-            .split(".")
+            .split('.')
             .map(|v| v.parse())
             .collect::<Result<Vec<u8>, std::num::ParseIntError>>()?;
 
@@ -87,6 +87,7 @@ pub struct Manager {
     check: bool,
     fix: bool,
     warn: bool,
+    force: bool,
     dir: PathBuf,
 }
 
@@ -95,14 +96,15 @@ impl Manager {
         let dir = std::env::current_dir()?;
 
         Ok(Self {
-            dir,
+            dir: dir.clone(),
             semver: args.value_of("semver").unwrap_or("minor").try_into()?,
             check: args.is_present("check"),
             fix: args.is_present("fix"),
             warn: args.is_present("warn"),
+            force: args.is_present("force"),
             target_branch: args.value_of("branch").unwrap_or("master").to_string(),
             current_branch: Self::get_current_branch()?,
-            workspaces: Self::get_cargo_workspace()?,
+            workspaces: Self::get_cargo_workspaces(dir)?,
         })
     }
 
@@ -120,8 +122,8 @@ impl Manager {
         Ok(branch.to_string())
     }
 
-    pub fn get_cargo_workspace() -> Result<Vec<String>, Error> {
-        let mut cargo_toml = std::env::current_dir()?;
+    pub fn get_cargo_workspaces(dir: PathBuf) -> Result<Vec<String>, Error> {
+        let mut cargo_toml = dir;
         cargo_toml.push("Cargo.toml");
 
         if !cargo_toml.exists() {
@@ -133,7 +135,9 @@ impl Manager {
 
         if config.package.is_some() {
             let dir = std::env::current_dir()?;
-            dir.to_str().map(|path| paths.push(String::from(path)));
+            if let Some(path) = dir.to_str() {
+                paths.push(String::from(path));
+            }
         }
 
         if let Some(workspace) = config.workspace {
@@ -147,7 +151,7 @@ impl Manager {
         let mut cargo_toml = workspace.clone();
         cargo_toml.push("Cargo.toml");
 
-        let mut cargo_lock = workspace.clone();
+        let mut cargo_lock = workspace;
         cargo_lock.push("Cargo.lock");
 
         let config = read_to_string(&cargo_toml)?;
@@ -223,7 +227,12 @@ impl Manager {
                             self.bump_version(PathBuf::from(workspace))?;
                         } else if self.warn {
                             eprintln!("{}", &msg);
+                        } else {
+                            println!("{}", &msg);
                         }
+                    } else if self.force {
+                        // force an update even if the workspace version is already updated;
+                        self.bump_version(PathBuf::from(workspace))?;
                     }
                 }
             }
@@ -237,7 +246,7 @@ impl Manager {
     }
 
     pub fn is_workspace_updated(&self, workspace: PathBuf) -> Result<bool, Error> {
-        let mut src_dir = workspace.clone();
+        let mut src_dir = workspace;
 
         // Only check the src directory;
         src_dir.push("src");
@@ -265,14 +274,14 @@ impl Manager {
     }
 
     pub fn get_workspace_version(workspace: PathBuf) -> Result<Option<String>, Error> {
-        let mut cargo_toml = workspace.clone();
+        let mut cargo_toml = workspace;
         cargo_toml.push("Cargo.toml");
         let config: CargoConfig = toml::from_str(&read_to_string(&cargo_toml)?)?;
         Ok(config.package.map(|pkg| pkg.version))
     }
 
     pub fn is_workspace_version_updated(&self, workspace: PathBuf) -> Result<bool, Error> {
-        let mut cargo_toml = workspace.clone();
+        let mut cargo_toml = workspace;
         cargo_toml.push("Cargo.toml");
 
         if !cargo_toml.exists() || !cargo_toml.is_file() {
