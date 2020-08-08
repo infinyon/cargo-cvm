@@ -1,6 +1,6 @@
 [package]
 name = "cargo-cvm"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2018"
 authors = ["Fluvio Contributors <team@fluvio.io>"]
 description = "Rust Crate Version Manager (CVM)"
@@ -15,7 +15,8 @@ name = "cargo-cvm"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.28"
+anyhow = "1.0.32"
+cargo_toml = "0.8.1"
 clap = "2.33.2"
 toml = "0.5.6"
 serde = { version = "1.0.114", features = ["derive"] }

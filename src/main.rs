@@ -32,13 +32,13 @@ fn main() -> Result<(), Error> {
                         .short("f")
                         .long("fix")
                         .takes_value(false)
-                        .help("Automatically fix the version if it is outdated. By default, this will bump the minor version, unless otherwise specified by the --semver flag"))
+                        .help("Automatically fix the version if it is outdated. By default, this will bump the minor version, unless otherwise specified by the --semver option"))
                 .arg(
                     Arg::with_name("force")
                         .short("F")
                         .long("force")
                         .takes_value(false)
-                        .help("Force a version bump. Can use be used with --semver to determine version type"),
+                        .help("Force a version bump. Can use be used with --semver option to determine version type"),
                 )
                 .arg(
                     Arg::with_name("check")
@@ -53,6 +53,13 @@ fn main() -> Result<(), Error> {
                         .long("warn")
                         .takes_value(false)
                         .help("Warn if the versions are out-of-date"),
+                )
+                .arg(
+                    Arg::with_name("commit")
+                        .short("c")
+                        .long("commit")
+                        .takes_value(false)
+                        .help("git commit updated version(s), otherwise will only add the files to git. Can only be used with --fix or --force flags"),
                 ),
         )
         .get_matches()

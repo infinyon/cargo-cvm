@@ -1,4 +1,5 @@
 use anyhow::Error;
+use cargo_toml::Manifest;
 use clap::ArgMatches;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
@@ -88,6 +89,7 @@ pub struct Manager {
     fix: bool,
     warn: bool,
     force: bool,
+    commit: bool,
     dir: PathBuf,
 }
 
@@ -102,6 +104,7 @@ impl Manager {
             fix: args.is_present("fix"),
             warn: args.is_present("warn"),
             force: args.is_present("force"),
+            commit: args.is_present("commit"),
             target_branch: args.value_of("branch").unwrap_or("master").to_string(),
             current_branch: Self::get_current_branch()?,
             workspaces: Self::get_cargo_workspaces(dir)?,
@@ -130,7 +133,7 @@ impl Manager {
             panic!("`cargo cvm` must be run in a directory containing a `Cargo.toml` file.\nFile does not exist at: {:?}", cargo_toml.display())
         }
 
-        let config: CargoConfig = toml::from_str(&read_to_string(&cargo_toml)?)?;
+        let config: Manifest = toml::from_str(&read_to_string(&cargo_toml)?)?;
         let mut paths: Vec<String> = Vec::new();
 
         if config.package.is_some() {
@@ -151,16 +154,17 @@ impl Manager {
         let mut cargo_toml = workspace.clone();
         cargo_toml.push("Cargo.toml");
 
-        let mut cargo_lock = workspace;
-        cargo_lock.push("Cargo.lock");
 
         let config = read_to_string(&cargo_toml)?;
-        if let Some(pkg) = toml::from_str::<CargoConfig>(&config)?.package {
+        if let Some(pkg) = toml::from_str::<Manifest>(&config)?.package {
             let old_version: Version = pkg.version.try_into()?;
             let mut new_version = old_version.clone();
             new_version.bump(self.semver.clone());
 
-            let updated_config = config.replace(&old_version.to_string(), &new_version.to_string());
+            
+            // Replace only the first instance of the old_version to the new_version;
+            // this will not replace dependency versions;
+            let updated_config = config.replacen(&old_version.to_string(), &new_version.to_string(), 1);
 
             // Remove the old version of the file;
             remove_file(&cargo_toml)?;
@@ -170,7 +174,7 @@ impl Manager {
             file.write_all(updated_config.as_bytes())?;
 
             // Commit the changes;
-            Self::commit_version_update(cargo_toml, cargo_lock, new_version.to_string())?;
+            Self::commit_version_update(cargo_toml, new_version.to_string())?;
 
             Ok(())
         } else {
@@ -178,27 +182,13 @@ impl Manager {
         }
     }
 
-    pub fn commit_version_update(
-        cargo_toml: PathBuf,
-        cargo_lock: PathBuf,
-        version: String,
-    ) -> Result<(), Error> {
+    pub fn commit_version_update(cargo_toml: PathBuf, version: String) -> Result<(), Error> {
         Command::new("git")
-            .args(&[
-                "add",
-                &cargo_toml.display().to_string(),
-                &cargo_lock.display().to_string(),
-            ])
+            .args(&["add", &cargo_toml.display().to_string()])
             .output()
             .expect("Failed to add updated config");
 
-        let commit_msg = format!("update version to {}", version);
-        Command::new("git")
-            .args(&["commit", "-m", &commit_msg])
-            .output()
-            .expect("Failed to add updated config");
-
-        println!("successfully committed version update to {}", version);
+        println!("added version {} update to ", version);
         Ok(())
     }
 
@@ -242,6 +232,14 @@ impl Manager {
             panic!("One or more workspace versions are out of date");
         }
 
+        if (self.commit && self.fix) || (self.commit && self.force) {
+            let commit_msg = format!("updated crate version(s)");
+            Command::new("git")
+                .args(&["commit", "-m", &commit_msg])
+                .output()
+                .expect("Failed to add updated crate versions");
+        }
+
         Ok(())
     }
 
@@ -276,7 +274,7 @@ impl Manager {
     pub fn get_workspace_version(workspace: PathBuf) -> Result<Option<String>, Error> {
         let mut cargo_toml = workspace;
         cargo_toml.push("Cargo.toml");
-        let config: CargoConfig = toml::from_str(&read_to_string(&cargo_toml)?)?;
+        let config: Manifest = toml::from_str(&read_to_string(&cargo_toml)?)?;
         Ok(config.package.map(|pkg| pkg.version))
     }
 
@@ -308,22 +306,4 @@ impl Manager {
 
         Ok(changes.contains("+version ="))
     }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct CargoPackage {
-    name: String,
-    version: String,
-    authors: Vec<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct CargoWorkspace {
-    members: Vec<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct CargoConfig {
-    package: Option<CargoPackage>,
-    workspace: Option<CargoWorkspace>,
 }

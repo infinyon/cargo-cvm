@@ -32,9 +32,11 @@ USAGE:
 
 FLAGS:
     -x, --check      Panic if the versions are out-of-date
+    -c, --commit     git commit updated version(s), otherwise will only add the files to git. Can only be used with
+                     --fix or --force flags
     -f, --fix        Automatically fix the version if it is outdated. By default, this will bump the minor version,
-                     unless otherwise specified by the --semver flag
-    -F, --force      Force a version bump. Can use be used with --semver to determine version type
+                     unless otherwise specified by the --semver option
+    -F, --force      Force a version bump. Can use be used with --semver option to determine version type
     -h, --help       Prints help information
     -V, --version    Prints version information
     -w, --warn       Warn if the versions are out-of-date
