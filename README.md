@@ -34,6 +34,7 @@ FLAGS:
     -x, --check      Panic if the versions are out-of-date
     -f, --fix        Automatically fix the version if it is outdated. By default, this will bump the minor version,
                      unless otherwise specified by the --semver flag
+    -F, --force      Force a version bump. Can use be used with --semver to determine version type
     -h, --help       Prints help information
     -V, --version    Prints version information
     -w, --warn       Warn if the versions are out-of-date
@@ -58,7 +59,7 @@ This command will `panic!` if a workspace's version is out of date.
 ## Bump Version
 
 ```bash
-cargo cvm --fix --semver [major, minor, or patch]
+cargo cvm --fix --semver [major, minor, patch]
 ```
 
 This command bumps the [semantic versioning](https://semver.org) of the crate given the type of semantic version provided, i.e. `major`, `minor`, or `patch`. By default, version updates use `minor`.
@@ -66,6 +67,14 @@ This command bumps the [semantic versioning](https://semver.org) of the crate gi
 When `cargo cvm -f` is run on an already up-to-date crate version, it will have no affect.
 
 > <br/>NOTE: If you run this command in a workspace with multiple members that are outdated, it will apply the same semantic versioning type across all crates, which may not be correct.<br/><br/>If you want to bump multiple versions that are not the same semantic version type, e.g. minor, then it is best to run this command inside the crate directory.<br/><br/>
+
+## Force Version Bump
+
+```bash
+cargo cvm --force --semver [major, minor, patch]
+```
+
+`cargo cvm -F` will force update a version, even if the workspace has an up-to-date version.
 
 ## Warn Outdated Versions
 
