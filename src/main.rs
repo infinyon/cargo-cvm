@@ -2,46 +2,70 @@ mod manager;
 
 use anyhow::Error;
 use clap::{crate_authors, crate_description, crate_version, App, Arg, SubCommand};
-use log::info;
 use manager::Manager;
 
 fn main() -> Result<(), Error> {
     env_logger::init();
 
-    let args = App::new("Rust Crate Version Manager (CVM)")
-        // Need to run this as a sub-command since we are extending cargo
-        .subcommand(SubCommand::with_name("cvm")
-
+    if let Some(args) = App::new("Rust Crate Version Manage (CVM)")
         .version(crate_version!())
         .author(crate_authors!())
         .about(crate_description!())
-
-        .arg(Arg::with_name("semver")
-            .short("s")
-            .value_name("semver")
-            .help("Type of Semantic Versioning; i.e. `minor`, `major`, or `patch`. Defaults to `minor`")
-            .default_value("minor"))
-
-        .arg(Arg::with_name("branch")
-            .short("b")
-            .value_name("branch")
-            .help("Which branch to compare to the current. Will attempt to find the version in the target branch and check if the version has been bumped or not.")
-            .takes_value(true)))
-        .get_matches();
-
-    // Search for Cargo.toml files, parse the version from the target branch vs. the current version;
-    // Run the operations in a temporary directory when cloning; requires there to be a remote git
-    // that can be cloned.
-
-    // Local checking can be done to, however, it requires that the current branch is in a clean state with changes committed.
-    // Look for Cargo.toml workspace first, this will show where all potential targets exist and their paths;
-    // Check if a workspace has changed if one exists. If one has not existed before, we can ignore;
-
-    let manager = Manager::new(args)?;
-
-    info!("Manager: {:?}", manager);
-
-    manager.check_workspaces()?;
+        .subcommand(
+            SubCommand::with_name("cvm")
+                .arg(
+                    Arg::with_name("semver")
+                        .short("s")
+                        .long("semver")
+                        .help(
+                            "Type of Semantic Versioning; i.e. `minor`, 
+                            `major`, or `patch`. Defaults to `minor`",
+                        )
+                        .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("branch")
+                        .short("b")
+                        .long("branch")
+                        .help(
+                            "Which branch to compare to the current. 
+                            Will attempt to find the version in the target branch and 
+                            check if the version has been bumped or not.",
+                        )
+                        .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("fix")
+                        .short("f")
+                        .long("fix")
+                        .takes_value(false)
+                        .help(
+                            "Automatically fix the version if it is outdated. 
+                            By default, this will bump the minor version, 
+                            unless otherwise specified by the --semver flag",
+                        ),
+                )
+                .arg(
+                    Arg::with_name("check")
+                        .short("x")
+                        .long("check")
+                        .takes_value(false)
+                        .help("Panic if the versions are out-of-date"),
+                )
+                .arg(
+                    Arg::with_name("warn")
+                        .short("w")
+                        .long("warn")
+                        .takes_value(false)
+                        .help("Warn if the versions are out-of-date"),
+                ),
+        )
+        .get_matches()
+        .subcommand_matches("cvm")
+    {
+        let manager = Manager::new(args)?;
+        manager.check_workspaces()?;
+    };
 
     Ok(())
 }
