@@ -1,7 +1,6 @@
 use anyhow::Error;
 use cargo_toml::Manifest;
 use clap::ArgMatches;
-use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::fs::read_to_string;
 use std::fs::{remove_file, File};
@@ -154,17 +153,16 @@ impl Manager {
         let mut cargo_toml = workspace.clone();
         cargo_toml.push("Cargo.toml");
 
-
         let config = read_to_string(&cargo_toml)?;
         if let Some(pkg) = toml::from_str::<Manifest>(&config)?.package {
             let old_version: Version = pkg.version.try_into()?;
             let mut new_version = old_version.clone();
             new_version.bump(self.semver.clone());
 
-            
             // Replace only the first instance of the old_version to the new_version;
             // this will not replace dependency versions;
-            let updated_config = config.replacen(&old_version.to_string(), &new_version.to_string(), 1);
+            let updated_config =
+                config.replacen(&old_version.to_string(), &new_version.to_string(), 1);
 
             // Remove the old version of the file;
             remove_file(&cargo_toml)?;
@@ -174,7 +172,7 @@ impl Manager {
             file.write_all(updated_config.as_bytes())?;
 
             // Commit the changes;
-            Self::commit_version_update(cargo_toml, new_version.to_string())?;
+            Self::git_add_version_update(cargo_toml, new_version.to_string())?;
 
             Ok(())
         } else {
@@ -182,13 +180,13 @@ impl Manager {
         }
     }
 
-    pub fn commit_version_update(cargo_toml: PathBuf, version: String) -> Result<(), Error> {
+    pub fn git_add_version_update(cargo_toml: PathBuf, version: String) -> Result<(), Error> {
         Command::new("git")
             .args(&["add", &cargo_toml.display().to_string()])
             .output()
             .expect("Failed to add updated config");
 
-        println!("added version {} update to ", version);
+        println!("version {} update added to git.", version);
         Ok(())
     }
 
