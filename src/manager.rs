@@ -143,7 +143,13 @@ impl Manager {
         Ok(paths)
     }
 
-    pub fn bump_version(&self, cargo_toml: PathBuf) -> Result<(), Error> {
+    pub fn bump_version(&self, workspace: PathBuf) -> Result<(), Error> {
+        let mut cargo_toml = workspace.clone();
+        cargo_toml.push("Cargo.toml");
+
+        let mut cargo_lock = workspace.clone();
+        cargo_lock.push("Cargo.lock");
+
         let config = read_to_string(&cargo_toml)?;
         if let Some(pkg) = toml::from_str::<CargoConfig>(&config)?.package {
             let old_version: Version = pkg.version.try_into()?;
@@ -160,7 +166,7 @@ impl Manager {
             file.write_all(updated_config.as_bytes())?;
 
             // Commit the changes;
-            Self::commit_version_update(cargo_toml, new_version.to_string())?;
+            Self::commit_version_update(cargo_toml, cargo_lock, new_version.to_string())?;
 
             Ok(())
         } else {
@@ -168,9 +174,17 @@ impl Manager {
         }
     }
 
-    pub fn commit_version_update(cargo_toml: PathBuf, version: String) -> Result<(), Error> {
+    pub fn commit_version_update(
+        cargo_toml: PathBuf,
+        cargo_lock: PathBuf,
+        version: String,
+    ) -> Result<(), Error> {
         Command::new("git")
-            .args(&["add", &cargo_toml.display().to_string()])
+            .args(&[
+                "add",
+                &cargo_toml.display().to_string(),
+                &cargo_lock.display().to_string(),
+            ])
             .output()
             .expect("Failed to add updated config");
 
@@ -206,7 +220,7 @@ impl Manager {
                             // set failed to true;
                             failed = true;
                         } else if self.fix {
-                            self.bump_version(cargo_toml)?;
+                            self.bump_version(PathBuf::from(workspace))?;
                         } else if self.warn {
                             eprintln!("{}", &msg);
                         }
