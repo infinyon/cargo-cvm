@@ -65,6 +65,7 @@ This command bumps the [semantic versioning](https://semver.org) of the crate gi
 
 When `cargo cvm -f` is run on an already up-to-date crate version, it will have no affect.
 
+> <br/>NOTE: If you run this command in a workspace with multiple members that are outdated, it will apply the same semantic versioning type across all crates, which may not be correct.<br/><br/>If you want to bump multiple versions that are not the same semantic version type, e.g. minor, then it is best to run this command inside the crate directory.<br/><br/>
 
 ## Warn Outdated Versions
 
@@ -73,3 +74,12 @@ cargo cvm --warn
 ```
 
 Similar to `cargo cvm -x`, this command will print errors when versions are out of date, but in this case, the command will not `panic!` when a crate is outdated.
+
+
+## Compare Target Branch
+
+```bash
+cargo cvm --branch <target-branch>
+```
+
+By default, CVM compares against the `master` branch. However, using the `--branch` or `-b` flag, you can specify a target branch to compare versions against.
