@@ -17,21 +17,14 @@ fn main() -> Result<(), Error> {
                     Arg::with_name("semver")
                         .short("s")
                         .long("semver")
-                        .help(
-                            "Type of Semantic Versioning; i.e. `minor`, 
-                            `major`, or `patch`. Defaults to `minor`",
-                        )
+                        .help("Type of Semantic Versioning; i.e. `minor`, `major`, or `patch`. Defaults to `minor`")
                         .takes_value(true),
                 )
                 .arg(
                     Arg::with_name("branch")
                         .short("b")
                         .long("branch")
-                        .help(
-                            "Which branch to compare to the current. 
-                            Will attempt to find the version in the target branch and 
-                            check if the version has been bumped or not.",
-                        )
+                        .help("Which branch to compare to the current. Will attempt to find the version in the target branch and check if the version has been bumped or not.")
                         .takes_value(true),
                 )
                 .arg(
@@ -39,11 +32,7 @@ fn main() -> Result<(), Error> {
                         .short("f")
                         .long("fix")
                         .takes_value(false)
-                        .help(
-                            "Automatically fix the version if it is outdated. 
-                            By default, this will bump the minor version, 
-                            unless otherwise specified by the --semver flag",
-                        ),
+                        .help("Automatically fix the version if it is outdated. By default, this will bump the minor version, unless otherwise specified by the --semver flag"),
                 )
                 .arg(
                     Arg::with_name("check")

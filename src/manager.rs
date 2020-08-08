@@ -185,6 +185,8 @@ impl Manager {
     }
 
     pub fn check_workspaces(&self) -> Result<(), Error> {
+        let mut failed = false;
+
         // For each of the workspace directories, check if any files in the src directory have changed;
         for workspace in self.workspaces.iter() {
             if self.is_workspace_updated(PathBuf::from(workspace))? {
@@ -200,21 +202,23 @@ impl Manager {
                             version, cargo_toml);
 
                         if self.check {
-                            panic!(msg.clone());
+                            eprintln!("{}", msg.clone());
+                            // set failed to true;
+                            failed = true;
                         } else if self.fix {
                             self.bump_version(cargo_toml)?;
-                        } else {
-                            println!("{}", &msg);
+                        } else if self.warn {
+                            eprintln!("{}", &msg);
                         }
-                    } else {
-                        println!(
-                            "version {} is up-to-date with {}!",
-                            version, self.target_branch
-                        );
                     }
                 }
             }
         }
+
+        if failed {
+            panic!("One or more workspace versions are out of date");
+        }
+
         Ok(())
     }
 
