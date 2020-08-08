@@ -1,9 +1,14 @@
 [package]
 name = "cargo-cvm"
 version = "0.2.1"
-authors = ["Ryan <ryan.michael.tate@gmail.com>"]
 edition = "2018"
+authors = ["Fluvio Contributors <team@fluvio.io>"]
 description = "Rust Crate Version Manager (CVM)"
+repository = "https://github.com/infinyon/cargo-cvm"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["version", "crate", "semver", "manager", "semantic"]
+categories = ["command-line-utilities", "development-tools::cargo-plugins"]
 
 [[bin]]
 name = "cargo-cvm"
