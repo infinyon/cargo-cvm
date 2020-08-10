@@ -1,6 +1,7 @@
 use anyhow::Error;
 use cargo_toml::Manifest;
 use clap::ArgMatches;
+use git2::Repository;
 use std::convert::TryInto;
 use std::fs::read_to_string;
 use std::fs::{remove_file, File};
@@ -52,6 +53,20 @@ impl TryInto<SemVer> for &str {
     }
 }
 
+impl TryInto<SemVer> for String {
+    type Error = Error;
+    fn try_into(self) -> Result<SemVer, Error> {
+        let semver = match self.as_ref() {
+            "minor" => SemVer::Minor,
+            "major" => SemVer::Major,
+            "patch" => SemVer::Patch,
+            _ => return Err(Error::msg(format!("Invalid option: {:?}", self))),
+        };
+
+        Ok(semver)
+    }
+}
+
 impl std::fmt::Display for Version {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
@@ -78,7 +93,6 @@ impl TryInto<Version> for String {
     }
 }
 
-#[derive(Debug, Clone)]
 pub struct Manager {
     semver: SemVer,
     target_branch: String,
@@ -89,15 +103,16 @@ pub struct Manager {
     warn: bool,
     force: bool,
     commit: bool,
-    dir: PathBuf,
+    repo: Repository,
 }
 
 impl Manager {
     pub fn new(args: &ArgMatches) -> Result<Self, Error> {
         let dir = std::env::current_dir()?;
 
+        let repo = Repository::discover(dir.clone())?;
+
         Ok(Self {
-            dir: dir.clone(),
             semver: args.value_of("semver").unwrap_or("minor").try_into()?,
             check: args.is_present("check"),
             fix: args.is_present("fix"),
@@ -105,23 +120,18 @@ impl Manager {
             force: args.is_present("force"),
             commit: args.is_present("commit"),
             target_branch: args.value_of("branch").unwrap_or("master").to_string(),
-            current_branch: Self::get_current_branch()?,
+            current_branch: Self::get_current_branch(&repo)?,
             workspaces: Self::get_cargo_workspaces(dir)?,
+            repo
         })
     }
 
-    pub fn get_current_branch() -> Result<String, Error> {
-        let output = Command::new("git")
-            .args(&["branch", "--show-current"])
-            .output()?;
-
-        if !output.status.success() {
-            panic!("Failed to find current branch; ensure you're on git version >2.22");
+    pub fn get_current_branch(repo: &Repository) -> Result<String, Error> {
+        if let Some(name) = repo.head()?.name() {
+            Ok(name.replace("refs/heads/", ""))
+        } else {
+            panic!("Failed to find current branch")
         }
-
-        let branch = std::str::from_utf8(&output.stdout)?;
-
-        Ok(branch.to_string())
     }
 
     pub fn get_cargo_workspaces(dir: PathBuf) -> Result<Vec<String>, Error> {
@@ -251,22 +261,42 @@ impl Manager {
             panic!("src directory does not exist at {:?}", src_dir.display())
         }
 
-        let compare = format!("{}..{}", self.target_branch, self.current_branch);
-        let args = &[
-            "diff",
-            &compare.trim(),
-            "--",
-            &src_dir.display().to_string(),
-        ];
-        let output = Command::new("git").args(args).output()?;
+        self.repo.diff_blobs(
+            None,
+            src_dir.to_str(),
+            None,
+            src_dir.to_str(),
+            None,
+            Some(&mut |delta, _value| {
+                println!("Delta Status: {:?}", delta.status());
+                true
+            }),
+            None,
+            None,
+            None,
+        )?;
 
-        if !output.status.success() {
-            panic!("Command failed: `git {:?}`", args);
-        }
 
-        let changes = std::str::from_utf8(&output.stdout)?;
 
-        Ok(!changes.is_empty())
+
+        Ok(true)
+
+        // let compare = format!("{}..{}", self.target_branch, self.current_branch);
+        // let args = &[
+        //     "diff",
+        //     &compare.trim(),
+        //     "--",
+        //     &src_dir.display().to_string(),
+        // ];
+        // let output = Command::new("git").args(args).output()?;
+
+        // if !output.status.success() {
+        //     panic!("Command failed: `git {:?}`", args);
+        // }
+
+        // let changes = std::str::from_utf8(&output.stdout)?;
+
+        // Ok(!changes.is_empty())
     }
 
     pub fn get_workspace_version(workspace: PathBuf) -> Result<Option<String>, Error> {
@@ -304,4 +334,50 @@ impl Manager {
 
         Ok(changes.contains("+version ="))
     }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use std::convert::TryInto;
+
+    fn dummy_manager() -> Result<super::Manager, Box<dyn std::error::Error>> {
+        let dir = std::env::current_dir()?;
+        let repo = git2::Repository::discover(dir.clone())?;
+
+        Ok(super::Manager {
+            semver: String::from("minor").try_into()?,
+            check: false,
+            fix: false,
+            warn: true,
+            force: false,
+            commit: false,
+            target_branch: String::from("master"),
+            current_branch: super::Manager::get_current_branch(&repo)?,
+            workspaces: super::Manager::get_cargo_workspaces(dir)?,
+            repo
+        })
+    } 
+    
+    #[test]
+    fn test_current_branch() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = std::env::current_dir()?;
+        let repo = git2::Repository::discover(dir.clone())?;
+        let branch = super::Manager::get_current_branch(&repo)?;
+        println!("branch: {:?}", branch.replace("refs/heads/", ""));
+        assert_eq!(branch.is_empty(), false);
+        
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_is_workspace_updated() -> Result<(), Box<dyn std::error::Error>> {
+        let mgr = dummy_manager()?;
+
+        mgr.check_workspaces()?;
+        
+        Ok(())
+    }
+
 }
