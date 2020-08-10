@@ -1,7 +1,8 @@
 use anyhow::Error;
 use cargo_toml::Manifest;
 use clap::ArgMatches;
-use git2::{Repository, Tree, BranchType};
+use git2::{BranchType, Repository, Tree};
+use std::cmp::Ordering;
 use std::convert::TryInto;
 use std::fs::read_to_string;
 use std::fs::{remove_file, File};
@@ -9,11 +10,39 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq)]
 pub struct Version {
     major: u8,
     minor: u8,
     patch: u8,
+}
+
+impl Ord for Version {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let major_ord = self.major.cmp(&other.major);
+        let minor_ord = self.minor.cmp(&other.minor);
+        let patch_ord = self.patch.cmp(&other.patch);
+
+        match major_ord {
+            Ordering::Equal => match minor_ord {
+                Ordering::Equal => patch_ord,
+                _ => minor_ord,
+            },
+            _ => major_ord,
+        }
+    }
+}
+
+impl PartialOrd for Version {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Version {
+    fn eq(&self, other: &Self) -> bool {
+        self.major == other.major && self.minor == other.minor && self.patch == other.patch
+    }
 }
 
 impl Version {
@@ -37,6 +66,17 @@ pub enum SemVer {
     Minor,
     Major,
     Patch,
+}
+
+impl TryInto<Version> for Manifest {
+    type Error = Error;
+    fn try_into(self) -> Result<Version, Self::Error> {
+        if let Some(pkg) = self.package {
+            Ok(pkg.version.try_into()?)
+        } else {
+            Err(Error::msg("Invalid cargo manifest"))
+        }
+    }
 }
 
 impl TryInto<SemVer> for &str {
@@ -94,6 +134,7 @@ impl TryInto<Version> for String {
 }
 
 pub struct Manager {
+    dir: PathBuf,
     semver: SemVer,
     target_branch: String,
     current_branch: String,
@@ -107,13 +148,13 @@ pub struct Manager {
 }
 
 impl Manager {
-
     pub fn new(args: &ArgMatches) -> Result<Self, Error> {
         let dir = std::env::current_dir()?;
 
         let repo = Repository::discover(dir.clone())?;
 
         Ok(Self {
+            dir: dir.clone(),
             semver: args.value_of("semver").unwrap_or("minor").try_into()?,
             check: args.is_present("check"),
             fix: args.is_present("fix"),
@@ -123,7 +164,7 @@ impl Manager {
             target_branch: args.value_of("branch").unwrap_or("master").to_string(),
             current_branch: Self::get_current_branch(&repo)?,
             workspaces: Self::get_cargo_workspaces(dir)?,
-            repo
+            repo,
         })
     }
 
@@ -254,8 +295,16 @@ impl Manager {
 
     /// Returns (target, current) trees based on target and current branch;
     pub fn get_comparison_trees(&self) -> Result<(Tree, Tree), Error> {
-        let target_branch_tree = self.repo.find_branch(&self.target_branch, BranchType::Local)?.into_reference().peel_to_tree()?;
-        let current_branch_tree = self.repo.find_branch(&self.current_branch, BranchType::Local)?.into_reference().peel_to_tree()?;
+        let target_branch_tree = self
+            .repo
+            .find_branch(&self.target_branch, BranchType::Local)?
+            .into_reference()
+            .peel_to_tree()?;
+        let current_branch_tree = self
+            .repo
+            .find_branch(&self.current_branch, BranchType::Local)?
+            .into_reference()
+            .peel_to_tree()?;
         Ok((target_branch_tree, current_branch_tree))
     }
 
@@ -269,13 +318,11 @@ impl Manager {
             panic!("src directory does not exist at {:?}", src_dir.display())
         }
 
-        let ( target_tree, current_tree ) = self.get_comparison_trees()?;
+        let (target_tree, current_tree) = self.get_comparison_trees()?;
 
-        let diff = self.repo.diff_tree_to_tree(
-            Some(&target_tree),
-            Some(&current_tree),
-            None,
-        )?;
+        let diff = self
+            .repo
+            .diff_tree_to_tree(Some(&target_tree), Some(&current_tree), None)?;
 
         let mut src_files_changed = false;
 
@@ -318,43 +365,32 @@ impl Manager {
             )
         }
 
-        let ( target_tree, current_tree ) = self.get_comparison_trees()?;
+        let (target_tree, current_tree) = self.get_comparison_trees()?;
 
-        let diff = self.repo.diff_tree_to_tree(
-            Some(&target_tree),
-            Some(&current_tree),
-            None,
+        let target_cargo_toml: Manifest = toml::from_slice(
+            target_tree
+                .get_path(self.dir.as_ref())?
+                .to_object(&self.repo)?
+                .peel_to_blob()?
+                .content(),
+        )?;
+        let current_cargo_toml: Manifest = toml::from_slice(
+            current_tree
+                .get_path(self.dir.as_ref())?
+                .to_object(&self.repo)?
+                .peel_to_blob()?
+                .content(),
         )?;
 
-        let mut is_version_updated = false;
+        let target_version: Version = target_cargo_toml.try_into()?;
+        let current_version: Version = current_cargo_toml.try_into()?;
 
-        diff.foreach(
-            &mut |_delta, _value| {
-                true
-            },
-            Some(&mut |delta, binary| {
-                if let Some(path) = delta.new_file().path() {
-                    if let Some(uri) = PathBuf::from(path).to_str() {
-                        if uri.contains("Cargo.toml") {
-                            if let Ok(text) = std::str::from_utf8(binary.new_file().data()) {
-                                println!("text: {:?}", text);
-                                is_version_updated = text.contains("+version = ");
-                            }
-                        }
-                    }
-                }
+        println!("Target Version: {:?}", target_version);
 
-
-                true
-            }),
-            None,
-            None,
-        )?;
-
-        Ok(is_version_updated)
+        // Determine if the target valuation is outdated compared to the current version
+        Ok(current_version > target_version)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -368,6 +404,7 @@ mod tests {
         let repo = git2::Repository::discover(dir.clone())?;
 
         Ok(super::Manager {
+            dir: dir.clone(),
             semver: String::from("minor").try_into()?,
             check: false,
             fix: false,
@@ -377,10 +414,10 @@ mod tests {
             target_branch: String::from("master"),
             current_branch: super::Manager::get_current_branch(&repo)?,
             workspaces: super::Manager::get_cargo_workspaces(dir)?,
-            repo
+            repo,
         })
-    } 
-    
+    }
+
     #[test]
     fn test_current_branch() -> Result<(), Box<dyn std::error::Error>> {
         let dir = std::env::current_dir()?;
@@ -389,7 +426,6 @@ mod tests {
         let branch = super::Manager::get_current_branch(&repo)?;
         println!("branch: {:?}", branch.replace("refs/heads/", ""));
         assert_eq!(branch.is_empty(), false);
-        
 
         Ok(())
     }
@@ -402,8 +438,7 @@ mod tests {
         mgr.is_workspace_updated(dir.clone())?;
 
         mgr.is_workspace_version_updated(dir)?;
-        
+
         Ok(())
     }
-
 }
