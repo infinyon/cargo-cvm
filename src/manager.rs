@@ -261,22 +261,21 @@ impl Manager {
             panic!("src directory does not exist at {:?}", src_dir.display())
         }
 
-        self.repo.diff_blobs(
-            None,
-            src_dir.to_str(),
-            None,
-            src_dir.to_str(),
-            None,
-            Some(&mut |delta, _value| {
-                println!("Delta Status: {:?}", delta.status());
-                true
-            }),
-            None,
-            None,
-            None,
+        let target_branch_blob = self.repo.find_branch(&self.target_branch, git2::BranchType::Local)?.into_reference().peel_to_tree()?;
+        let current_branch_blob = self.repo.find_branch(&self.current_branch, git2::BranchType::Local)?.into_reference().peel_to_tree()?;
+
+
+
+
+        println!("Checking workspace for changes");
+
+        let diff =self.repo.diff_tree_to_tree(
+            Some(&target_branch_blob),
+            Some(&current_branch_blob),
+            Some(git2::DiffOptions::new().pathspec(src_dir)),
         )?;
 
-
+        println!("Diff stats: {:?}", diff.stats());
 
 
         Ok(true)
