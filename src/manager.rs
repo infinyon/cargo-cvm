@@ -1,7 +1,7 @@
 use anyhow::Error;
 use cargo_toml::Manifest;
 use clap::ArgMatches;
-use git2::Repository;
+use git2::{Repository, Tree, BranchType};
 use std::convert::TryInto;
 use std::fs::read_to_string;
 use std::fs::{remove_file, File};
@@ -107,6 +107,7 @@ pub struct Manager {
 }
 
 impl Manager {
+
     pub fn new(args: &ArgMatches) -> Result<Self, Error> {
         let dir = std::env::current_dir()?;
 
@@ -251,6 +252,13 @@ impl Manager {
         Ok(())
     }
 
+    /// Returns (target, current) trees based on target and current branch;
+    pub fn get_comparison_trees(&self) -> Result<(Tree, Tree), Error> {
+        let target_branch_tree = self.repo.find_branch(&self.target_branch, BranchType::Local)?.into_reference().peel_to_tree()?;
+        let current_branch_tree = self.repo.find_branch(&self.current_branch, BranchType::Local)?.into_reference().peel_to_tree()?;
+        Ok((target_branch_tree, current_branch_tree))
+    }
+
     pub fn is_workspace_updated(&self, workspace: PathBuf) -> Result<bool, Error> {
         let mut src_dir = workspace;
 
@@ -261,41 +269,35 @@ impl Manager {
             panic!("src directory does not exist at {:?}", src_dir.display())
         }
 
-        let target_branch_blob = self.repo.find_branch(&self.target_branch, git2::BranchType::Local)?.into_reference().peel_to_tree()?;
-        let current_branch_blob = self.repo.find_branch(&self.current_branch, git2::BranchType::Local)?.into_reference().peel_to_tree()?;
+        let ( target_tree, current_tree ) = self.get_comparison_trees()?;
 
-
-
-
-        println!("Checking workspace for changes");
-
-        let diff =self.repo.diff_tree_to_tree(
-            Some(&target_branch_blob),
-            Some(&current_branch_blob),
-            Some(git2::DiffOptions::new().pathspec(src_dir)),
+        let diff = self.repo.diff_tree_to_tree(
+            Some(&target_tree),
+            Some(&current_tree),
+            None,
         )?;
 
-        println!("Diff stats: {:?}", diff.stats());
+        let mut src_files_changed = false;
 
+        diff.foreach(
+            &mut |delta, _value| {
+                if let Some(path) = delta.new_file().path() {
+                    if let Some(uri) = PathBuf::from(path).to_str() {
+                        if uri.contains("src") {
+                            // set src_files_changed to true;
+                            src_files_changed = true;
+                        }
+                    }
+                }
 
-        Ok(true)
+                true
+            },
+            None,
+            None,
+            None,
+        )?;
 
-        // let compare = format!("{}..{}", self.target_branch, self.current_branch);
-        // let args = &[
-        //     "diff",
-        //     &compare.trim(),
-        //     "--",
-        //     &src_dir.display().to_string(),
-        // ];
-        // let output = Command::new("git").args(args).output()?;
-
-        // if !output.status.success() {
-        //     panic!("Command failed: `git {:?}`", args);
-        // }
-
-        // let changes = std::str::from_utf8(&output.stdout)?;
-
-        // Ok(!changes.is_empty())
+        Ok(src_files_changed)
     }
 
     pub fn get_workspace_version(workspace: PathBuf) -> Result<Option<String>, Error> {
@@ -316,22 +318,40 @@ impl Manager {
             )
         }
 
-        let compare = format!("{}..{}", self.target_branch, self.current_branch);
-        let args = &[
-            "diff",
-            &compare.trim(),
-            "--",
-            &cargo_toml.display().to_string(),
-        ];
-        let output = Command::new("git").args(args).output()?;
+        let ( target_tree, current_tree ) = self.get_comparison_trees()?;
 
-        if !output.status.success() {
-            panic!("Command failed: `git {:?}`", args);
-        }
+        let diff = self.repo.diff_tree_to_tree(
+            Some(&target_tree),
+            Some(&current_tree),
+            None,
+        )?;
 
-        let changes = String::from(std::str::from_utf8(&output.stdout)?);
+        let mut is_version_updated = false;
 
-        Ok(changes.contains("+version ="))
+        diff.foreach(
+            &mut |_delta, _value| {
+                true
+            },
+            Some(&mut |delta, binary| {
+                if let Some(path) = delta.new_file().path() {
+                    if let Some(uri) = PathBuf::from(path).to_str() {
+                        if uri.contains("Cargo.toml") {
+                            if let Ok(text) = std::str::from_utf8(binary.new_file().data()) {
+                                println!("text: {:?}", text);
+                                is_version_updated = text.contains("+version = ");
+                            }
+                        }
+                    }
+                }
+
+
+                true
+            }),
+            None,
+            None,
+        )?;
+
+        Ok(is_version_updated)
     }
 }
 
@@ -342,6 +362,9 @@ mod tests {
 
     fn dummy_manager() -> Result<super::Manager, Box<dyn std::error::Error>> {
         let dir = std::env::current_dir()?;
+
+        println!("Current directory: {:?}", dir);
+
         let repo = git2::Repository::discover(dir.clone())?;
 
         Ok(super::Manager {
@@ -361,6 +384,7 @@ mod tests {
     #[test]
     fn test_current_branch() -> Result<(), Box<dyn std::error::Error>> {
         let dir = std::env::current_dir()?;
+
         let repo = git2::Repository::discover(dir.clone())?;
         let branch = super::Manager::get_current_branch(&repo)?;
         println!("branch: {:?}", branch.replace("refs/heads/", ""));
@@ -374,7 +398,10 @@ mod tests {
     fn test_is_workspace_updated() -> Result<(), Box<dyn std::error::Error>> {
         let mgr = dummy_manager()?;
 
-        mgr.check_workspaces()?;
+        let dir = std::env::current_dir()?;
+        mgr.is_workspace_updated(dir.clone())?;
+
+        mgr.is_workspace_version_updated(dir)?;
         
         Ok(())
     }
