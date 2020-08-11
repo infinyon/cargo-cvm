@@ -145,7 +145,6 @@ pub struct Manager {
     semver: SemVer,
     target_remote: String,
     target_branch: String,
-    current_branch: String,
     workspaces: Vec<String>,
     check: bool,
     fix: bool,
@@ -153,7 +152,7 @@ pub struct Manager {
     force: bool,
     commit: bool,
     repo: Repository,
-    ssh_key_path: String
+    ssh_key_path: String,
 }
 
 impl Manager {
@@ -171,19 +170,13 @@ impl Manager {
             commit: args.is_present("commit"),
             target_branch: args.value_of("branch").unwrap_or("master").to_string(),
             target_remote: args.value_of("remote").unwrap_or("origin").to_string(),
-            current_branch: Self::get_current_branch(&repo)?,
             workspaces: Self::get_cargo_workspaces(dir)?,
-            ssh_key_path: args.value_of("ssh-key").unwrap_or(&ssh_key_path).to_string(),
+            ssh_key_path: args
+                .value_of("ssh-key")
+                .unwrap_or(&ssh_key_path)
+                .to_string(),
             repo,
         })
-    }
-
-    pub fn get_current_branch(repo: &Repository) -> Result<String, Error> {
-        if let Some(name) = repo.head()?.name() {
-            Ok(name.replace("refs/heads", ""))
-        } else {
-            panic!("Failed to find current branch")
-        }
     }
 
     pub fn get_cargo_workspaces(dir: PathBuf) -> Result<Vec<String>, Error> {
@@ -212,7 +205,7 @@ impl Manager {
     }
 
     pub fn bump_version(&self, workspace: PathBuf) -> Result<(), Error> {
-        let mut cargo_toml = workspace.clone();
+        let mut cargo_toml = workspace;
         cargo_toml.push("Cargo.toml");
 
         let config = read_to_string(&cargo_toml)?;
@@ -255,12 +248,12 @@ impl Manager {
     pub fn fetch_target(&self) -> Result<(), Error> {
         let mut callbacks = git2::RemoteCallbacks::new();
         callbacks.credentials(|_url, username_from_url, _allowed_types| {
-          git2::Cred::ssh_key(
-            username_from_url.unwrap_or_default(),
-            None,
-            std::path::Path::new(&self.ssh_key_path),
-            None,
-          )
+            git2::Cred::ssh_key(
+                username_from_url.unwrap_or_default(),
+                None,
+                std::path::Path::new(&self.ssh_key_path),
+                None,
+            )
         });
 
         let mut fetch_options = git2::FetchOptions::new();
@@ -270,11 +263,17 @@ impl Manager {
             Ok(mut remote) => {
                 remote.fetch(&[&self.target_branch], Some(&mut fetch_options), None)?;
                 Ok(())
-            },
+            }
             Err(e) => {
-                eprint!("Failed to find target remote host: {:?}; Error: {:?}", &self.target_remote, e);
+                eprint!(
+                    "Failed to find target remote host: {:?}; Error: {:?}",
+                    &self.target_remote, e
+                );
                 let remotes = self.repo.remotes()?;
-                let remotes = &remotes.iter().map(|remote| remote.unwrap_or("")).collect::<Vec<&str>>();
+                let remotes = &remotes
+                    .iter()
+                    .map(|remote| remote.unwrap_or(""))
+                    .collect::<Vec<&str>>();
                 println!("\nAvailable Remotes: {:?}", remotes);
                 panic!("Remote does not exist; try again with an available remote.");
             }
@@ -317,8 +316,8 @@ impl Manager {
             panic!("One or more workspace versions are out of date");
         }
 
-        if (self.commit && self.fix) || (self.commit && self.force) {
-            let commit_msg = format!("updated crate version(s)");
+        if (self.force || self.fix) && self.commit {
+            let commit_msg = String::from("updated crate version(s)");
             Command::new("git")
                 .args(&["commit", "-m", &commit_msg])
                 .output()
@@ -332,24 +331,19 @@ impl Manager {
     pub fn get_comparison_trees(&self) -> Result<(Tree, Tree), Error> {
         let remote = format!("{}/{}", self.target_remote, self.target_branch);
         self.repo
-            .branches(Some(BranchType::Remote))?
-            .into_iter()
+            .branches(None)?
             .collect::<Result<Vec<(git2::Branch, BranchType)>, git2::Error>>()?
-            .iter().for_each(|b| {
+            .iter()
+            .for_each(|b| {
                 println!("Found Branch: {:?}", b.0.name());
             });
-        
 
         let target_branch_tree = self
             .repo
             .find_branch(&remote, BranchType::Remote)?
             .into_reference()
             .peel_to_tree()?;
-        let current_branch_tree = self
-            .repo
-            .find_branch(&self.current_branch, BranchType::Local)?
-            .into_reference()
-            .peel_to_tree()?;
+        let current_branch_tree = self.repo.head()?.peel_to_tree()?;
         Ok((target_branch_tree, current_branch_tree))
     }
 
@@ -472,23 +466,10 @@ mod tests {
             commit: false,
             target_remote: String::from("origin"),
             target_branch: String::from("master"),
-            current_branch: super::Manager::get_current_branch(&repo)?,
             workspaces: super::Manager::get_cargo_workspaces(dir)?,
             ssh_key_path,
             repo,
         })
-    }
-
-    #[test]
-    fn test_current_branch() -> Result<(), Box<dyn std::error::Error>> {
-        let dir = std::env::current_dir()?;
-
-        let repo = git2::Repository::discover(dir)?;
-        let branch = super::Manager::get_current_branch(&repo)?;
-        println!("branch: {:?}", branch.replace("refs/heads/", ""));
-        assert_eq!(branch.is_empty(), false);
-
-        Ok(())
     }
 
     #[test]
