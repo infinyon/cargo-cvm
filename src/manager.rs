@@ -330,9 +330,10 @@ impl Manager {
 
     /// Returns (target, current) trees based on target and current branch;
     pub fn get_comparison_trees(&self) -> Result<(Tree, Tree), Error> {
+        let remote = format!("{}/{}", self.target_remote, self.target_branch);
         let target_branch_tree = self
             .repo
-            .find_branch(&self.target_branch, BranchType::Local)?
+            .find_branch(&remote, BranchType::Remote)?
             .into_reference()
             .peel_to_tree()?;
         let current_branch_tree = self
