@@ -331,6 +331,15 @@ impl Manager {
     /// Returns (target, current) trees based on target and current branch;
     pub fn get_comparison_trees(&self) -> Result<(Tree, Tree), Error> {
         let remote = format!("{}/{}", self.target_remote, self.target_branch);
+        self.repo
+            .branches(Some(BranchType::Remote))?
+            .into_iter()
+            .collect::<Result<Vec<(git2::Branch, BranchType)>, git2::Error>>()?
+            .iter().for_each(|b| {
+                println!("Found Branch: {:?}", b.0.name());
+            });
+        
+
         let target_branch_tree = self
             .repo
             .find_branch(&remote, BranchType::Remote)?
