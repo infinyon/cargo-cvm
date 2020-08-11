@@ -389,7 +389,6 @@ impl Manager {
 
         diff.foreach(
             &mut |delta, _value| {
-                no_changes = false;
                 let old_file = delta.old_file();
                 let new_file = delta.new_file();
 
@@ -402,6 +401,7 @@ impl Manager {
                                 if let Some(file) = path.to_str() {
                                     if file.contains(dir) {
                                         src_files_changed = true;
+                                        no_changes = false;
                                     }
                                 }
                             }
