@@ -212,7 +212,7 @@ impl Manager {
     }
 
     pub fn bump_version(&self, workspace: PathBuf) -> Result<(), Error> {
-        let mut cargo_toml = workspace.clone();
+        let mut cargo_toml = workspace;
         cargo_toml.push("Cargo.toml");
 
         let config = read_to_string(&cargo_toml)?;
@@ -317,8 +317,8 @@ impl Manager {
             panic!("One or more workspace versions are out of date");
         }
 
-        if (self.commit && self.fix) || (self.commit && self.force) {
-            let commit_msg = format!("updated crate version(s)");
+        if (self.force || self.fix) && self.commit {
+            let commit_msg = String::from("updated crate version(s)");
             Command::new("git")
                 .args(&["commit", "-m", &commit_msg])
                 .output()
@@ -333,7 +333,6 @@ impl Manager {
         let remote = format!("{}/{}", self.target_remote, self.target_branch);
         self.repo
             .branches(Some(BranchType::Remote))?
-            .into_iter()
             .collect::<Result<Vec<(git2::Branch, BranchType)>, git2::Error>>()?
             .iter().for_each(|b| {
                 println!("Found Branch: {:?}", b.0.name());
