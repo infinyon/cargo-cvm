@@ -361,7 +361,7 @@ impl Manager {
                 let old_file = delta.old_file();
                 let new_file = delta.new_file();
 
-                if let Some(path) = old_file.path() {
+                if let Some(path) = new_file.path() {
                     if let Some(uri) = PathBuf::from(path).to_str() {
                         if let Some(repo_path) = self.repo.path().to_str() {
                             let mut path = PathBuf::from(repo_path.replace("/.git", ""));
