@@ -42,10 +42,12 @@ FLAGS:
     -w, --warn       Warn if the versions are out-of-date
 
 OPTIONS:
-    -b, --branch <branch>    Which branch to compare to the current. Will attempt to find the version in the target
-                             branch and check if the version has been bumped or not.
-    -s, --semver <semver>    Type of Semantic Versioning; i.e. `minor`, `major`, or `patch`. Defaults to `minor`
-
+    -b, --branch <branch>      Which branch to compare to the current. Will attempt to find the version in the target
+                               branch and check if the version has been bumped or not.
+    -r, --remote <remote>      Determine which remote to use for the target branch. Defaults to `origin`.
+    -s, --semver <semver>      Type of Semantic Versioning; i.e. `minor`, `major`, or `patch`. Defaults to `minor`
+    -k, --ssh-key <ssh-key>    Provide the path to your ssh private key for authenticating against remote git hosts.
+                               Defaults to $HOME/.ssh/id_rsa
 ```
 
 ## Version Check
