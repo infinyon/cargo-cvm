@@ -308,6 +308,71 @@ impl Manager {
         Ok((target_branch_tree, current_branch_tree))
     }
 
+    pub fn is_update_required(&self, delta: git2::DiffDelta) -> Result<bool, Error> {
+        let mut src_files_changed = false;
+        let mut version_is_updated = false;
+        let old_file = delta.old_file();
+        let new_file = delta.new_file();
+        if let Some(path) = old_file.path() {
+            if let Some(uri) = PathBuf::from(path).to_str() {
+                if uri.contains("src") {
+                    // set src_files_changed to true;
+                    src_files_changed = true;
+                }
+
+                if uri.contains("Cargo.toml") {
+                    let old_manifest: Manifest =
+                        toml::from_slice(self.repo.find_blob(old_file.id())?.content())?;
+                    let new_manifest: Manifest =
+                        toml::from_slice(self.repo.find_blob(new_file.id())?.content())?;
+
+                    let old_version: Version = old_manifest.try_into()?;
+                    let new_version: Version = new_manifest.try_into()?;
+
+                    version_is_updated = new_version > old_version;
+                }
+            }
+        }
+
+        Ok(src_files_changed && version_is_updated)
+    }
+
+    pub fn is_version_outdated(&self, workspace: PathBuf) -> Result<bool, Error> {
+        let mut src_dir = workspace.clone();
+        let mut cargo_toml = workspace.clone();
+
+        // Only check the src directory;
+        src_dir.push("src");
+        cargo_toml.push("Cargo.toml");
+
+        if !src_dir.exists() || !src_dir.is_dir() || !cargo_toml.exists() || !cargo_toml.is_file() {
+            panic!("src directory does not exist at {:?}", src_dir.display())
+        }
+
+        let (target_tree, current_tree) = self.get_comparison_trees()?;
+
+        let diff = self
+            .repo
+            .diff_tree_to_tree(Some(&target_tree), Some(&current_tree), None)?;
+
+        let mut outdated = false;
+
+        diff.foreach(
+            &mut |delta, _value| {
+                if let Ok(update_required) = self.is_update_required(delta) {
+                    outdated = update_required
+                }
+
+                true
+            },
+            None,
+            None,
+            None,
+        )?;
+
+        Ok(outdated)
+    }
+
     pub fn is_workspace_updated(&self, workspace: PathBuf) -> Result<bool, Error> {
         let mut src_dir = workspace;
 
@@ -435,9 +500,9 @@ mod tests {
         let mgr = dummy_manager()?;
 
         let dir = std::env::current_dir()?;
-        mgr.is_workspace_updated(dir.clone())?;
+        let is_outdated = mgr.is_version_outdated(dir)?;
 
-        mgr.is_workspace_version_updated(dir)?;
+        assert_eq!(is_outdated, false);
 
         Ok(())
     }
