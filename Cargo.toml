@@ -1,6 +1,6 @@
 [package]
 name = "cargo-cvm"
-version = "0.5.5"
+version = "0.5.7"
 edition = "2018"
 authors = ["Fluvio Contributors <team@fluvio.io>"]
 description = "Rust Crate Version Manager (CVM)"

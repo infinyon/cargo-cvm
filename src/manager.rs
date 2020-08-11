@@ -330,13 +330,6 @@ impl Manager {
     /// Returns (target, current) trees based on target and current branch;
     pub fn get_comparison_trees(&self) -> Result<(Tree, Tree), Error> {
         let remote = format!("{}/{}", self.target_remote, self.target_branch);
-        self.repo
-            .branches(None)?
-            .collect::<Result<Vec<(git2::Branch, BranchType)>, git2::Error>>()?
-            .iter()
-            .for_each(|b| {
-                println!("Found Branch: {:?}", b.0.name());
-            });
 
         let target_branch_tree = self
             .repo
@@ -396,7 +389,6 @@ impl Manager {
 
         diff.foreach(
             &mut |delta, _value| {
-                no_changes = false;
                 let old_file = delta.old_file();
                 let new_file = delta.new_file();
 
@@ -409,6 +401,7 @@ impl Manager {
                                 if let Some(file) = path.to_str() {
                                     if file.contains(dir) {
                                         src_files_changed = true;
+                                        no_changes = false;
                                     }
                                 }
                             }
