@@ -322,6 +322,13 @@ impl Manager {
         Ok((old_version, new_version))
     }
 
+    pub fn get_workspace_version(workspace: PathBuf) -> Result<Version, Error> {
+        let mut cargo_toml = workspace;
+        cargo_toml.push("Cargo.toml");
+        let config: Manifest = toml::from_str(&read_to_string(&cargo_toml)?)?;
+        Ok(config.try_into()?)
+    }
+
     pub fn is_version_outdated(
         &self,
         workspace: PathBuf,
@@ -343,12 +350,14 @@ impl Manager {
             .repo
             .diff_tree_to_tree(Some(&target_tree), Some(&current_tree), None)?;
 
+        let mut no_changes = true;
         let mut src_files_changed = false;
-        let mut version_is_updated = true;
-        let mut outdated_version: Version = Version::default();
+        let mut version_is_updated = false;
+        let mut outdated_version: Version = Self::get_workspace_version(workspace)?;
 
         diff.foreach(
             &mut |delta, _value| {
+                no_changes = false;
                 let old_file = delta.old_file();
                 let new_file = delta.new_file();
 
@@ -357,7 +366,6 @@ impl Manager {
                         if let Some(repo_path) = self.repo.path().to_str() {
                             let mut path = PathBuf::from(repo_path.replace("/.git", ""));
                             path.push(uri);
-
                             if let Some(dir) = src_dir.to_str() {
                                 if let Some(file) = path.to_str() {
                                     if file.contains(dir) {
@@ -374,6 +382,8 @@ impl Manager {
 
                                     if !version_is_updated {
                                         outdated_version = new_version;
+                                    } else {
+                                        outdated_version = old_version;
                                     }
                                 }
                             }
@@ -388,7 +398,7 @@ impl Manager {
             None,
         )?;
 
-        if src_files_changed && version_is_updated {
+        if src_files_changed && version_is_updated || no_changes {
             Ok(None)
         } else {
             Ok(Some((outdated_version, cargo_toml)))
