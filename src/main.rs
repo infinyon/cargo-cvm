@@ -28,6 +28,20 @@ fn main() -> Result<(), Error> {
                         .takes_value(true),
                 )
                 .arg(
+                    Arg::with_name("remote")
+                        .short("r")
+                        .long("remote")
+                        .help("Determine which remote to use for the target branch. Defaults to `origin`.")
+                        .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("ssh-key")
+                        .short("k")
+                        .long("ssh-key")
+                        .help("Provide the path to your ssh private key for authenticating against remote git hosts. Defaults to $HOME/.ssh/id_rsa")
+                        .takes_value(true),
+                )
+                .arg(
                     Arg::with_name("fix")
                         .short("f")
                         .long("fix")

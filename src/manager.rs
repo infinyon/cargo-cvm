@@ -143,6 +143,7 @@ impl TryInto<Version> for String {
 
 pub struct Manager {
     semver: SemVer,
+    target_remote: String,
     target_branch: String,
     current_branch: String,
     workspaces: Vec<String>,
@@ -152,13 +153,14 @@ pub struct Manager {
     force: bool,
     commit: bool,
     repo: Repository,
+    ssh_key_path: String
 }
 
 impl Manager {
     pub fn new(args: &ArgMatches) -> Result<Self, Error> {
         let dir = std::env::current_dir()?;
-
         let repo = Repository::discover(dir.clone())?;
+        let ssh_key_path = format!("{}/.ssh/id_rsa", std::env::var("HOME")?);
 
         Ok(Self {
             semver: args.value_of("semver").unwrap_or("minor").try_into()?,
@@ -168,15 +170,17 @@ impl Manager {
             force: args.is_present("force"),
             commit: args.is_present("commit"),
             target_branch: args.value_of("branch").unwrap_or("master").to_string(),
+            target_remote: args.value_of("remote").unwrap_or("origin").to_string(),
             current_branch: Self::get_current_branch(&repo)?,
             workspaces: Self::get_cargo_workspaces(dir)?,
+            ssh_key_path: args.value_of("ssh-key").unwrap_or(&ssh_key_path).to_string(),
             repo,
         })
     }
 
     pub fn get_current_branch(repo: &Repository) -> Result<String, Error> {
         if let Some(name) = repo.head()?.name() {
-            Ok(name.replace("refs/heads/", ""))
+            Ok(name.replace("refs/heads", ""))
         } else {
             panic!("Failed to find current branch")
         }
@@ -248,7 +252,38 @@ impl Manager {
         Ok(())
     }
 
+    pub fn fetch_target(&self) -> Result<(), Error> {
+        let mut callbacks = git2::RemoteCallbacks::new();
+        callbacks.credentials(|_url, username_from_url, _allowed_types| {
+          git2::Cred::ssh_key(
+            username_from_url.unwrap_or_default(),
+            None,
+            std::path::Path::new(&self.ssh_key_path),
+            None,
+          )
+        });
+
+        let mut fetch_options = git2::FetchOptions::new();
+        fetch_options.remote_callbacks(callbacks);
+
+        match self.repo.find_remote(&self.target_remote) {
+            Ok(mut remote) => {
+                remote.fetch(&[&self.target_branch], Some(&mut fetch_options), None)?;
+                Ok(())
+            },
+            Err(e) => {
+                eprint!("Failed to find target remote host: {:?}; Error: {:?}", &self.target_remote, e);
+                let remotes = self.repo.remotes()?;
+                let remotes = &remotes.iter().map(|remote| remote.unwrap_or("")).collect::<Vec<&str>>();
+                println!("\nAvailable Remotes: {:?}", remotes);
+                panic!("Remote does not exist; try again with an available remote.");
+            }
+        }
+    }
+
     pub fn check_workspaces(&self) -> Result<(), Error> {
+        self.fetch_target()?;
+
         let mut failed = false;
 
         // For each of the workspace directories, check if any files in the src directory have changed;
@@ -295,9 +330,10 @@ impl Manager {
 
     /// Returns (target, current) trees based on target and current branch;
     pub fn get_comparison_trees(&self) -> Result<(Tree, Tree), Error> {
+        let remote = format!("{}/{}", self.target_remote, self.target_branch);
         let target_branch_tree = self
             .repo
-            .find_branch(&self.target_branch, BranchType::Local)?
+            .find_branch(&remote, BranchType::Remote)?
             .into_reference()
             .peel_to_tree()?;
         let current_branch_tree = self
@@ -416,6 +452,7 @@ mod tests {
         println!("Current directory: {:?}", dir);
 
         let repo = git2::Repository::discover(dir.clone())?;
+        let ssh_key_path = format!("{}/.ssh/id_rsa", std::env::var("HOME")?);
 
         Ok(super::Manager {
             semver: String::from("minor").try_into()?,
@@ -424,9 +461,11 @@ mod tests {
             warn: true,
             force: false,
             commit: false,
+            target_remote: String::from("origin"),
             target_branch: String::from("master"),
             current_branch: super::Manager::get_current_branch(&repo)?,
             workspaces: super::Manager::get_cargo_workspaces(dir)?,
+            ssh_key_path,
             repo,
         })
     }
