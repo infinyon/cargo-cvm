@@ -8,7 +8,6 @@ use std::fs::read_to_string;
 use std::fs::{remove_file, File};
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::Command;
 
 #[derive(Debug, Clone, Eq)]
 pub struct Version {
@@ -184,7 +183,8 @@ impl Manager {
         cargo_toml.push("Cargo.toml");
 
         if !cargo_toml.exists() {
-            panic!("`cargo cvm` must be run in a directory containing a `Cargo.toml` file.\nFile does not exist at: {:?}", cargo_toml.display())
+            eprintln!("`cargo cvm` must be run in a directory containing a `Cargo.toml` file.\nFile does not exist at: {:?}", cargo_toml.display());
+            std::process::abort()
         }
 
         let config: Manifest = toml::from_str(&read_to_string(&cargo_toml)?)?;
@@ -226,22 +226,38 @@ impl Manager {
             let mut file = File::create(&cargo_toml)?;
             file.write_all(updated_config.as_bytes())?;
 
-            // Commit the changes;
-            Self::git_add_version_update(cargo_toml, new_version.to_string())?;
+            // Add changes to the git index;
+            self.git_add_version_update(cargo_toml, new_version.to_string())?;
 
             Ok(())
         } else {
-            panic!("invalid cargo file");
+            eprintln!("invalid cargo file");
+            std::process::abort()
         }
     }
 
-    pub fn git_add_version_update(cargo_toml: PathBuf, version: String) -> Result<(), Error> {
-        Command::new("git")
-            .args(&["add", &cargo_toml.display().to_string()])
-            .output()
-            .expect("Failed to add updated config");
+    pub fn git_add_version_update(
+        &self,
+        cargo_toml: PathBuf,
+        version: String,
+    ) -> Result<(), Error> {
+        let mut index = self.repo.index()?;
 
-        println!("version {} update added to git.", version);
+        if let Some(strip_path) = index.path() {
+            if let Some(path) = strip_path.to_str() {
+                if let Some(file_path) = cargo_toml.to_str() {
+                    let root_path = &path.replace(".git/index", "");
+                    let relative_file = file_path.replace(root_path, "");
+                    index.add_path(PathBuf::from(relative_file).as_path())?;
+
+                    // Update the index for the repo;
+                    self.repo.checkout_index(Some(&mut index), None)?;
+
+                    println!("version {} update added to git.", version);
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -275,7 +291,8 @@ impl Manager {
                     .map(|remote| remote.unwrap_or(""))
                     .collect::<Vec<&str>>();
                 println!("\nAvailable Remotes: {:?}", remotes);
-                panic!("Remote does not exist; try again with an available remote.");
+                eprintln!("Remote does not exist; try again with an available remote.");
+                std::process::abort()
             }
         }
     }
@@ -313,17 +330,42 @@ impl Manager {
         }
 
         if failed {
-            panic!("One or more workspace versions are out of date");
+            eprintln!("Found outdated version, exiting process unsuccessfully");
+            std::process::abort()
         }
 
         if (self.force || self.fix) && self.commit {
-            let commit_msg = String::from("updated crate version(s)");
-            Command::new("git")
-                .args(&["commit", "-m", &commit_msg])
-                .output()
-                .expect("Failed to add updated crate versions");
+            self.commit_changes("updated crate version(s)")?;
         }
 
+        Ok(())
+    }
+
+    pub fn new_signature(&self) -> Result<git2::Signature, Error> {
+        let config = self.repo.config()?;
+
+        let name = config.get_entry("user.name")?;
+        let email = config.get_entry("user.email")?;
+
+        let sig = git2::Signature::now(
+            name.value().unwrap_or_default(),
+            email.value().unwrap_or_default(),
+        )?;
+
+        Ok(sig)
+    }
+
+    pub fn commit_changes(&self, msg: &str) -> Result<(), Error> {
+        let mut index = self.repo.index()?;
+        let oid = index.write_tree()?;
+        let tree = self.repo.find_tree(oid)?;
+        let sig = self.new_signature()?;
+        let parent_commit = self.repo.head()?.peel_to_commit()?;
+        let new_commit =
+            self.repo
+                .commit(Some("HEAD"), &sig, &sig, msg, &tree, &[&parent_commit])?;
+
+        println!("commit {:?} includes version updates", new_commit);
         Ok(())
     }
 
@@ -373,7 +415,8 @@ impl Manager {
         cargo_toml.push("Cargo.toml");
 
         if !src_dir.exists() || !src_dir.is_dir() || !cargo_toml.exists() || !cargo_toml.is_file() {
-            panic!("src directory does not exist at {:?}", src_dir.display())
+            eprintln!("src directory does not exist at {:?}", src_dir.display());
+            std::process::abort()
         }
 
         let (target_tree, current_tree) = self.get_comparison_trees()?;
@@ -469,11 +512,18 @@ mod tests {
     fn test_is_workspace_updated() -> Result<(), Box<dyn std::error::Error>> {
         let mgr = dummy_manager()?;
 
-        println!("index: {:?}", mgr.repo.index()?.path());
-
         let dir = std::env::current_dir()?;
 
         assert_eq!(mgr.is_version_outdated(dir)?.is_some(), false);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_signature() -> Result<(), Box<dyn std::error::Error>> {
+        let mgr = dummy_manager()?;
+
+        mgr.new_signature()?;
 
         Ok(())
     }
