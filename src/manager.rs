@@ -184,7 +184,7 @@ impl Manager {
 
         if !cargo_toml.exists() {
             eprintln!("`cargo cvm` must be run in a directory containing a `Cargo.toml` file.\nFile does not exist at: {:?}", cargo_toml.display());
-            std::process::abort()
+            std::process::exit(1)
         }
 
         let config: Manifest = toml::from_str(&read_to_string(&cargo_toml)?)?;
@@ -232,7 +232,7 @@ impl Manager {
             Ok(())
         } else {
             eprintln!("invalid cargo file");
-            std::process::abort()
+            std::process::exit(1)
         }
     }
 
@@ -292,7 +292,7 @@ impl Manager {
                     .collect::<Vec<&str>>();
                 println!("\nAvailable Remotes: {:?}", remotes);
                 eprintln!("Remote does not exist; try again with an available remote.");
-                std::process::abort()
+                std::process::exit(1)
             }
         }
     }
@@ -331,7 +331,7 @@ impl Manager {
 
         if failed {
             eprintln!("Found outdated version, exiting process unsuccessfully");
-            std::process::abort()
+            std::process::exit(1)
         }
 
         if (self.force || self.fix) && self.commit {
@@ -416,7 +416,7 @@ impl Manager {
 
         if !src_dir.exists() || !src_dir.is_dir() || !cargo_toml.exists() || !cargo_toml.is_file() {
             eprintln!("src directory does not exist at {:?}", src_dir.display());
-            std::process::abort()
+            std::process::exit(1)
         }
 
         let (target_tree, current_tree) = self.get_comparison_trees()?;
