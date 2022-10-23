@@ -1,87 +1,64 @@
 mod manager;
 
 use anyhow::Error;
-use clap::{crate_authors, crate_description, crate_version, App, Arg, SubCommand};
-use manager::Manager;
+use clap::Parser;
+use manager::{Manager, SemVer};
+
+/// Rust Crate Version Manage (CVM)
+#[derive(Parser, Default)]
+#[command(about, author, version)]
+pub struct Args {
+    /// Type of Semantic Versioning
+    #[arg(short, long, value_enum, default_value_t)]
+    pub semver: SemVer,
+
+    /// Which branch to compare to the current. Will attempt to find the version in the target branch and check if the version has been bumped or not
+    #[arg(short, long, default_value_t = String::from("master"))]
+    pub branch: String,
+
+    /// Determine which remote to use for the target branch
+    #[arg(short, long, default_value_t = String::from("origin"))]
+    pub remote: String,
+
+    /// Provide the path to your ssh private key for authenticating against remote git hosts. Defaults to $HOME/.ssh/id_rsa
+    #[arg(short = 'k', long = "ssh-key")]
+    pub ssh_key_path: Option<String>,
+
+    /// Automatically fix the version if it is outdated. By default, this will bump the minor version, unless otherwise specified by the --semver option
+    #[arg(short, long)]
+    pub fix: bool,
+
+    /// Force a version bump. Can use be used with --semver option to determine version type
+    #[arg(short = 'F', long)]
+    pub force: bool,
+
+    /// Panic if the versions are out-of-date
+    #[arg(short = 'x', long)]
+    pub check: bool,
+
+    /// Warn if the versions are out-of-date
+    #[arg(short, long)]
+    pub warn: bool,
+
+    /// git commit updated version(s), otherwise will only add the files to git. Can only be used with --fix or --force flags
+    #[arg(short, long)]
+    pub commit: bool,
+}
 
 fn main() -> Result<(), Error> {
     env_logger::init();
 
-    if let Some(args) = App::new("Rust Crate Version Manage (CVM)")
-        .version(crate_version!())
-        .author(crate_authors!())
-        .about(crate_description!())
-        .subcommand(
-            SubCommand::with_name("cvm")
-                .arg(
-                    Arg::with_name("semver")
-                        .short("s")
-                        .long("semver")
-                        .help("Type of Semantic Versioning; i.e. `minor`, `major`, or `patch`. Defaults to `minor`")
-                        .takes_value(true),
-                )
-                .arg(
-                    Arg::with_name("branch")
-                        .short("b")
-                        .long("branch")
-                        .help("Which branch to compare to the current. Will attempt to find the version in the target branch and check if the version has been bumped or not.")
-                        .takes_value(true),
-                )
-                .arg(
-                    Arg::with_name("remote")
-                        .short("r")
-                        .long("remote")
-                        .help("Determine which remote to use for the target branch. Defaults to `origin`.")
-                        .takes_value(true),
-                )
-                .arg(
-                    Arg::with_name("ssh-key")
-                        .short("k")
-                        .long("ssh-key")
-                        .help("Provide the path to your ssh private key for authenticating against remote git hosts. Defaults to $HOME/.ssh/id_rsa")
-                        .takes_value(true),
-                )
-                .arg(
-                    Arg::with_name("fix")
-                        .short("f")
-                        .long("fix")
-                        .takes_value(false)
-                        .help("Automatically fix the version if it is outdated. By default, this will bump the minor version, unless otherwise specified by the --semver option"))
-                .arg(
-                    Arg::with_name("force")
-                        .short("F")
-                        .long("force")
-                        .takes_value(false)
-                        .help("Force a version bump. Can use be used with --semver option to determine version type"),
-                )
-                .arg(
-                    Arg::with_name("check")
-                        .short("x")
-                        .long("check")
-                        .takes_value(false)
-                        .help("Panic if the versions are out-of-date"),
-                )
-                .arg(
-                    Arg::with_name("warn")
-                        .short("w")
-                        .long("warn")
-                        .takes_value(false)
-                        .help("Warn if the versions are out-of-date"),
-                )
-                .arg(
-                    Arg::with_name("commit")
-                        .short("c")
-                        .long("commit")
-                        .takes_value(false)
-                        .help("git commit updated version(s), otherwise will only add the files to git. Can only be used with --fix or --force flags"),
-                ),
-        )
-        .get_matches()
-        .subcommand_matches("cvm")
-    {
-        let manager = Manager::new(args)?;
-        manager.check_workspaces()?;
-    };
-
-    Ok(())
+    // Filter out `cvm` subcommand when used from Cargo
+    let args = std::env::args()
+        .enumerate()
+        .filter_map(|(i, arg)| {
+            if i == 1 && arg == "cvm" {
+                None
+            } else {
+                Some(arg)
+            }
+        });
+    let args = Args::parse_from(args);
+    let manager = Manager::new(args)?;
+    manager.check_workspaces()
 }

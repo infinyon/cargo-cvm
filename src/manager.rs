@@ -1,6 +1,6 @@
 use anyhow::Error;
 use cargo_toml::Manifest;
-use clap::ArgMatches;
+use clap::ValueEnum;
 use git2::{BranchType, Repository, Tree};
 use std::cmp::Ordering;
 use std::convert::TryInto;
@@ -8,6 +8,8 @@ use std::fs::read_to_string;
 use std::fs::{remove_file, File};
 use std::io::Write;
 use std::path::PathBuf;
+
+use crate::Args;
 
 #[derive(Debug, Clone, Eq)]
 pub struct Version {
@@ -68,8 +70,9 @@ impl Version {
         }
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone, ValueEnum)]
 pub enum SemVer {
+    #[default]
     Minor,
     Major,
     Patch,
@@ -155,25 +158,25 @@ pub struct Manager {
 }
 
 impl Manager {
-    pub fn new(args: &ArgMatches) -> Result<Self, Error> {
+    // Consumes `args`
+    // TODO: Merge `Args` and `Manager` into single struct?
+    pub fn new(args: Args) -> Result<Self, Error> {
         let dir = std::env::current_dir()?;
         let repo = Repository::discover(dir.clone())?;
         let ssh_key_path = format!("{}/.ssh/id_rsa", std::env::var("HOME")?);
 
         Ok(Self {
-            semver: args.value_of("semver").unwrap_or("minor").try_into()?,
-            check: args.is_present("check"),
-            fix: args.is_present("fix"),
-            warn: args.is_present("warn"),
-            force: args.is_present("force"),
-            commit: args.is_present("commit"),
-            target_branch: args.value_of("branch").unwrap_or("master").to_string(),
-            target_remote: args.value_of("remote").unwrap_or("origin").to_string(),
+            semver: args.semver,
+            check: args.check,
+            fix: args.fix,
+            warn: args.warn,
+            force: args.force,
+            commit: args.commit,
+            target_branch: args.branch,
+            target_remote: args.remote,
             workspaces: Self::get_cargo_workspaces(dir)?,
-            ssh_key_path: args
-                .value_of("ssh-key")
-                .unwrap_or(&ssh_key_path)
-                .to_string(),
+            ssh_key_path: args.ssh_key_path
+                .unwrap_or(ssh_key_path),
             repo,
         })
     }
@@ -400,7 +403,7 @@ impl Manager {
         let mut cargo_toml = workspace;
         cargo_toml.push("Cargo.toml");
         let config: Manifest = toml::from_str(&read_to_string(&cargo_toml)?)?;
-        Ok(config.try_into()?)
+        config.try_into()
     }
 
     pub fn is_version_outdated(
@@ -514,7 +517,7 @@ mod tests {
 
         let dir = std::env::current_dir()?;
 
-        assert_eq!(mgr.is_version_outdated(dir)?.is_some(), false);
+        assert!(mgr.is_version_outdated(dir)?.is_some());
 
         Ok(())
     }
