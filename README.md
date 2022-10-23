@@ -25,29 +25,22 @@ cargo cvm --help
 ```
 
 ```
-cargo-cvm-cvm 
+Rust Crate Version Manager (CVM)
 
-USAGE:
-    cargo-cvm cvm [FLAGS] [OPTIONS]
+Usage: cargo-cvm [OPTIONS]
 
-FLAGS:
-    -x, --check      Panic if the versions are out-of-date
-    -c, --commit     git commit updated version(s), otherwise will only add the files to git. Can only be used with
-                     --fix or --force flags
-    -f, --fix        Automatically fix the version if it is outdated. By default, this will bump the minor version,
-                     unless otherwise specified by the --semver option
-    -F, --force      Force a version bump. Can use be used with --semver option to determine version type
-    -h, --help       Prints help information
-    -V, --version    Prints version information
-    -w, --warn       Warn if the versions are out-of-date
-
-OPTIONS:
-    -b, --branch <branch>      Which branch to compare to the current. Will attempt to find the version in the target
-                               branch and check if the version has been bumped or not.
-    -r, --remote <remote>      Determine which remote to use for the target branch. Defaults to `origin`.
-    -s, --semver <semver>      Type of Semantic Versioning; i.e. `minor`, `major`, or `patch`. Defaults to `minor`
-    -k, --ssh-key <ssh-key>    Provide the path to your ssh private key for authenticating against remote git hosts.
-                               Defaults to $HOME/.ssh/id_rsa
+Options:
+  -s, --semver <SEMVER>         Type of Semantic Versioning [default: minor] [possible values: minor, major, patch]
+  -b, --branch <BRANCH>         Which branch to compare to the current. Will attempt to find the version in the target branch and check if the version has been bumped or not [default: master]
+  -r, --remote <REMOTE>         Determine which remote to use for the target branch [default: origin]
+  -k, --ssh-key <SSH_KEY_PATH>  Provide the path to your ssh private key for authenticating against remote git hosts. Defaults to $HOME/.ssh/id_rsa
+  -f, --fix                     Automatically fix the version if it is outdated. By default, this will bump the minor version, unless otherwise specified by the --semver option
+  -F, --force                   Force a version bump. Can use be used with --semver option to determine version type
+  -x, --check                   Panic if the versions are out-of-date
+  -w, --warn                    Warn if the versions are out-of-date
+  -c, --commit                  git commit updated version(s), otherwise will only add the files to git. Can only be used with --fix or --force flags
+  -h, --help                    Print help information
+  -V, --version                 Print version information
 ```
 
 ## Version Check
