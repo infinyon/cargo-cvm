@@ -403,7 +403,7 @@ impl Manager {
         let mut cargo_toml = workspace;
         cargo_toml.push("Cargo.toml");
         let config: Manifest = toml::from_str(&read_to_string(&cargo_toml)?)?;
-        Ok(config.try_into()?)
+        config.try_into()
     }
 
     pub fn is_version_outdated(
@@ -517,7 +517,7 @@ mod tests {
 
         let dir = std::env::current_dir()?;
 
-        assert_eq!(mgr.is_version_outdated(dir)?.is_some(), false);
+        assert!(mgr.is_version_outdated(dir)?.is_some());
 
         Ok(())
     }
