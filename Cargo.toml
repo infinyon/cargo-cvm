@@ -22,4 +22,4 @@ toml = "0.5.6"
 serde = { version = "1.0.114", features = ["derive"] }
 log = "0.4.11"
 env_logger = "0.7.1"
-git2 = "0.13.8"
+git2 = "0.16.1"
